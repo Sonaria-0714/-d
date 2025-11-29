@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SONALIA: LOGICAL PIPELINE (FINAL)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
@@ -123,7 +124,7 @@
         window.onerror = function(msg, url, line) {
             const el = document.getElementById('error-box');
             el.style.display = 'block';
-            el.innerHTML = "System Error: " + msg + " (Line: " + line + ")";
+            el.innerHTML = "System Error: " + msg + "<br>Line: " + line;
             return false;
         };
 
@@ -312,7 +313,6 @@
         }
 
         function spawnMemory(origin) {
-            // 【修正】ターゲットが存在するか確認
             if (!nodeCache.DB || nodeCache.DB.length === 0) return;
 
             const targetMesh = nodeCache.DB[Math.floor(Math.random()*nodeCache.DB.length)];
@@ -332,7 +332,6 @@
             TWEEN.update();
             controls.update();
             
-            // Spawn logic
             if(Math.random() > 0.95) spawnMeteor();
 
             // Meteors
@@ -340,6 +339,15 @@
                 const m = meteors[i];
                 m.z += m.speed;
                 m.mesh.position.z = m.z;
+
+                // 【修正点】色補間処理を互換性のある書き方に変更
+                if(m.state === 3 && m.z > 130) { // Filter Gate
+                    m.state = 4;
+                    const c1 = new THREE.Color(0x00ffff);
+                    const c2 = new THREE.Color(0xff0055);
+                    const filterCol = c1.lerp(c2, cfRatio);
+                    m.mesh.material.color.lerp(filterCol, 0.8);
+                }
 
                 if(m.state === 0 && m.z > -110) { // OS
                     m.state = 1;
@@ -354,11 +362,6 @@
                     m.state = 3;
                     m.speed *= 1.2;
                     m.mesh.scale.set(15,15,1);
-                }
-                if(m.state === 3 && m.z > 130) { // Filter
-                    m.state = 4;
-                    const filterCol = new THREE.Color().lerpColors(new THREE.Color(0x00ffff), new THREE.Color(0xff0055), cfRatio);
-                    m.mesh.material.color.lerp(filterCol, 0.8);
                 }
                 
                 if(m.z > 180) {
@@ -387,15 +390,18 @@
             memoryGeo.attributes.position.needsUpdate = true;
             memoryGeo.attributes.color.needsUpdate = true;
 
-            // Filter Color
-            const fCol = new THREE.Color().lerpColors(new THREE.Color(0x00ffff), new THREE.Color(0xff0055), cfRatio);
-            if(cfFilterMesh[0]) cfFilterMesh[0].material.color = fCol;
+            // Filter Gate Color Update (Compatible Way)
+            const fc1 = new THREE.Color(0x00ffff);
+            const fc2 = new THREE.Color(0xff0055);
+            if(cfFilterMesh[0]) {
+                cfFilterMesh[0].material.color.copy(fc1).lerp(fc2, cfRatio);
+            }
             document.getElementById('cf-knob').style.left = (cfRatio*100) + '%';
 
             renderer.render(scene, camera);
         }
 
-        // --- INTERACTION ---
+        // Interaction
         window.addEventListener('mousedown', e => {
             if(e.target.closest('#panel') || e.target.closest('#cf-container')) return;
             
@@ -415,10 +421,13 @@
         });
 
         function showPanel(d) {
+            // 修正: カラーコードの扱いを安全に
+            const hex = new THREE.Color(d.color).getHexString();
+            
             document.getElementById('p-tag').innerText = d.type;
-            document.getElementById('p-tag').style.background = '#'+new THREE.Color(d.color).getHexString();
+            document.getElementById('p-tag').style.background = '#' + hex;
             document.getElementById('p-title').innerText = d.name;
-            document.getElementById('p-title').style.color = '#'+new THREE.Color(d.color).getHexString();
+            document.getElementById('p-title').style.color = '#' + hex;
             document.getElementById('p-desc').innerText = d.desc;
             document.getElementById('p-role').innerText = d.role;
             document.getElementById('p-thought').innerText = d.thought;
