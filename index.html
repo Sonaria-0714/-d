@@ -2,21 +2,12 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SONALIA: MASTER ARCHITECT</title>
+    <title>SONALIA: LOGICAL PIPELINE (FINAL)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
 
-        /* --- ERROR MONITOR (非常用) --- */
-        #error-box {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(50, 0, 0, 0.9); border: 2px solid red; color: #fff;
-            padding: 20px; font-family: monospace; z-index: 99999; display: none;
-            max-width: 80%; word-wrap: break-word;
-        }
-
-        /* --- UI LAYER --- */
+        /* UI LAYER */
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
         #hud-title {
@@ -30,20 +21,21 @@
         /* C:F METER */
         #cf-container {
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-            width: 400px; text-align: center; pointer-events: auto;
+            width: 500px; text-align: center; pointer-events: auto;
         }
         .cf-bar-bg {
-            width: 100%; height: 6px; background: #222; border: 1px solid #555; border-radius: 3px;
-            position: relative; margin-top: 10px; box-shadow: 0 0 15px rgba(0,255,255,0.2);
+            width: 100%; height: 8px; background: #222; border: 1px solid #555; border-radius: 4px;
+            position: relative; margin-top: 10px; box-shadow: 0 0 15px rgba(0,255,255,0.1);
             cursor: pointer;
         }
         .cf-knob {
-            width: 14px; height: 14px; background: #fff; border-radius: 50%; position: absolute; top: -4px; left: 50%;
+            width: 16px; height: 24px; background: #fff; position: absolute; top: -8px; left: 50%;
             transform: translateX(-50%); box-shadow: 0 0 10px #fff; transition: left 0.1s;
+            border-radius: 4px;
         }
-        .cf-labels { display: flex; justify-content: space-between; font-size: 11px; color: #88aaff; font-weight: bold; }
+        .cf-labels { display: flex; justify-content: space-between; font-size: 12px; color: #88aaff; font-weight: bold; }
 
-        /* PANEL */
+        /* INFO PANEL */
         #panel {
             position: absolute; top: 0; right: 0; width: 380px; height: 100%;
             background: rgba(8, 12, 16, 0.96); border-left: 1px solid #333;
@@ -53,7 +45,7 @@
         }
         #panel.active { transform: translateX(0); }
         .p-head { padding: 40px 30px; border-bottom: 1px solid #333; background: linear-gradient(180deg, rgba(0,255,255,0.1), transparent); }
-        .p-tag { font-size: 10px; padding: 3px 8px; border-radius: 2px; background: #00ffff; color: #000; font-weight: bold; }
+        .p-tag { font-size: 10px; padding: 4px 10px; border-radius: 2px; background: #00ffff; color: #000; font-weight: 800; }
         .p-title { font-size: 28px; margin: 15px 0 0; color: #fff; text-shadow: 0 0 15px currentColor; }
         .p-body { padding: 30px; overflow-y: auto; flex: 1; }
         .row { margin-bottom: 30px; }
@@ -72,16 +64,18 @@
         .load-text { font-size: 40px; color: #fff; font-weight: bold; letter-spacing: 6px; text-shadow: 0 0 30px #00ffff; }
         .load-sub { color: #00ffff; font-family: monospace; margin-top: 15px; animation: blink 1s infinite; }
         @keyframes blink { 50% { opacity: 0.5; } }
+        
+        /* ERROR BOX (Hidden by default) */
+        #error-box {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(50,0,0,0.9); border: 1px solid red; padding: 20px;
+            color: #fff; display: none; z-index: 10000; font-family: monospace;
+        }
     </style>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
-    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r120/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.120.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
@@ -89,13 +83,13 @@
 
     <div id="loader" onclick="startApp()">
         <div class="load-text">SONALIA</div>
-        <div class="load-sub">LOADING SYSTEM...</div>
+        <div class="load-sub">LOADING PIPELINE...</div>
     </div>
 
     <div id="ui-layer">
         <div id="hud-title">
             <h1>思考回路マップ</h1>
-            <p>NARRATIVE PROCESS FLOW</p>
+            <p>LOGIC PIPELINE VISUALIZER</p>
         </div>
 
         <div id="cf-container">
@@ -110,7 +104,7 @@
     </div>
 
     <div id="panel">
-        <div class="close-btn" id="p-close">×</div>
+        <div class="close-btn" onclick="closePanel()">×</div>
         <div class="p-head">
             <span class="p-tag" id="p-tag">TAG</span>
             <h2 class="p-title" id="p-title">Title</h2>
@@ -118,21 +112,19 @@
         <div class="p-body">
             <div class="row"><span class="label">DEFINITION</span><div class="text" id="p-desc">...</div></div>
             <div class="row"><span class="label">SYSTEM ROLE</span><div class="text" id="p-role">...</div></div>
-            <div class="row"><span class="label">INTERNAL VOICE</span><div class="thought" id="p-thought">...</div></div>
+            <div class="row"><span class="label">INTERNAL VOICE</span><div class="text" id="p-thought" style="font-family:monospace; color:#fff;">...</div></div>
         </div>
     </div>
 
     <canvas id="canvas"></canvas>
 
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
+    <script>
         // --- Error Handling ---
         window.onerror = function(msg, url, line) {
             const el = document.getElementById('error-box');
             el.style.display = 'block';
-            el.innerHTML = `<strong>SYSTEM ERROR:</strong><br>${msg}<br>Line: ${line}`;
+            el.innerHTML = "System Error: " + msg + " (Line: " + line + ")";
+            return false;
         };
 
         // --- DATA ---
@@ -177,7 +169,10 @@
         let memoryGeo, memoryMat;
         const cfFilterMesh = [];
 
-        init();
+        // Node Cache for Pathfinding
+        const nodeCache = {
+            INPUT: [], OS: [], DB: [], FACTOR: [], OUTPUT: []
+        };
 
         function init() {
             scene = new THREE.Scene();
@@ -190,32 +185,24 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
 
-            controls = new OrbitControls(camera, renderer.domElement);
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.autoRotate = true; 
             controls.autoRotateSpeed = 0.3;
 
             mainGroup = new THREE.Group();
-            mainGroup.rotation.z = -Math.PI / 2; // Horizontal Sleeper
+            mainGroup.rotation.z = -Math.PI / 2; 
             scene.add(mainGroup);
 
             glowTex = createGlowTex();
 
-            // Build
             buildPipelineStructure();
             buildFilterGate();
             buildMemoryPool();
 
-            // Start
             animate();
             setupSlider();
-            
-            // Hide Loader
-            const l = document.getElementById('loader');
-            if(l) {
-                l.style.opacity = 0;
-                setTimeout(() => { l.style.display='none'; }, 800);
-            }
+            setTimeout(startApp, 1500);
         }
 
         function createGlowTex() {
@@ -230,7 +217,7 @@
         }
 
         function buildPipelineStructure() {
-            // Spine (BufferGeometry)
+            // Spine
             const points = [new THREE.Vector3(0,0,-200), new THREE.Vector3(0,0,200)];
             const spineGeo = new THREE.BufferGeometry().setFromPoints(points);
             const spineLine = new THREE.Line(spineGeo, new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3 }));
@@ -247,6 +234,7 @@
                     const hit = new THREE.Mesh(new THREE.CylinderGeometry(40,40,5,16), new THREE.MeshBasicMaterial({visible:false}));
                     hit.rotation.x = Math.PI/2; hit.position.z = d.z; hit.userData = { data: d };
                     interactables.push(hit); mainGroup.add(hit);
+                    nodeCache.OS.push(mesh);
 
                 } else if(d.type === '係数') {
                     const r = 60;
@@ -256,8 +244,8 @@
                     mesh = new THREE.Mesh(new THREE.BoxGeometry(8,8,8), new THREE.MeshBasicMaterial({ color: col, wireframe: true }));
                     mesh.position.set(fx, fy, d.z);
                     mesh.userData = { data: d }; interactables.push(mesh);
+                    nodeCache.FACTOR.push(mesh);
                     
-                    // Cable
                     const pts = [new THREE.Vector3(0,0,d.z), new THREE.Vector3(fx,fy,d.z)];
                     const lGeo = new THREE.BufferGeometry().setFromPoints(pts);
                     mainGroup.add(new THREE.Line(lGeo, new THREE.LineBasicMaterial({color:col, opacity:0.3, transparent:true})));
@@ -268,9 +256,14 @@
                     mesh.userData = { data: d }; interactables.push(mesh);
                     
                     if(d.type === 'DB') {
+                         nodeCache.DB.push(mesh);
                          const pts = [new THREE.Vector3(0,0,d.z), new THREE.Vector3(d.x,d.y,d.z)];
                          const lGeo = new THREE.BufferGeometry().setFromPoints(pts);
                          mainGroup.add(new THREE.Line(lGeo, new THREE.LineBasicMaterial({color:col, opacity:0.3, transparent:true})));
+                    } else if(d.type === 'INPUT') {
+                        nodeCache.INPUT.push(mesh);
+                    } else if(d.type === 'OUTPUT') {
+                        nodeCache.OUTPUT.push(mesh);
                     }
                 }
 
@@ -319,22 +312,27 @@
         }
 
         function spawnMemory(origin) {
-            const targets = NODES.filter(n => n.type === 'DB');
-            const target = targets[Math.floor(Math.random()*targets.length)];
+            // 【修正】ターゲットが存在するか確認
+            if (!nodeCache.DB || nodeCache.DB.length === 0) return;
+
+            const targetMesh = nodeCache.DB[Math.floor(Math.random()*nodeCache.DB.length)];
+            const target = targetMesh.position;
+            const color = targetMesh.material.color;
             
             memoryParticles.push({
                 pos: origin.clone(),
-                target: new THREE.Vector3(target.x, target.y, target.z),
-                color: new THREE.Color(target.color),
+                target: target.clone(),
+                color: color.clone(),
                 life: 1.0
             });
         }
 
         function animate() {
             requestAnimationFrame(animate);
+            TWEEN.update();
             controls.update();
-            const time = clock.getElapsedTime();
             
+            // Spawn logic
             if(Math.random() > 0.95) spawnMeteor();
 
             // Meteors
@@ -369,10 +367,9 @@
                 }
             }
 
-            // Memories (BufferGeometry update)
+            // Memories Update
             const positions = memoryGeo.attributes.position.array;
             const colors = memoryGeo.attributes.color.array;
-            // Reset invisible
             for(let i=0; i<200; i++) { positions[i*3] = 0; positions[i*3+1] = 0; positions[i*3+2] = 0; }
             
             memoryParticles = memoryParticles.filter(p => p.life > 0);
@@ -390,16 +387,18 @@
             memoryGeo.attributes.position.needsUpdate = true;
             memoryGeo.attributes.color.needsUpdate = true;
 
-            // Filter
+            // Filter Color
             const fCol = new THREE.Color().lerpColors(new THREE.Color(0x00ffff), new THREE.Color(0xff0055), cfRatio);
             if(cfFilterMesh[0]) cfFilterMesh[0].material.color = fCol;
-            
+            document.getElementById('cf-knob').style.left = (cfRatio*100) + '%';
+
             renderer.render(scene, camera);
         }
 
-        // Interaction
+        // --- INTERACTION ---
         window.addEventListener('mousedown', e => {
             if(e.target.closest('#panel') || e.target.closest('#cf-container')) return;
+            
             controls.autoRotate = false; 
             setTimeout(() => controls.autoRotate = true, 3000);
 
@@ -415,17 +414,6 @@
             }
         });
 
-        function setupSlider() {
-            const track = document.getElementById('cf-track');
-            const knob = document.getElementById('cf-knob');
-            track.addEventListener('mousedown', e => {
-                const rect = track.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                cfRatio = Math.max(0, Math.min(1, x / rect.width));
-                knob.style.left = (cfRatio * 100) + '%';
-            });
-        }
-
         function showPanel(d) {
             document.getElementById('p-tag').innerText = d.type;
             document.getElementById('p-tag').style.background = '#'+new THREE.Color(d.color).getHexString();
@@ -437,13 +425,30 @@
             document.getElementById('panel').classList.add('active');
         }
         function closePanel() { document.getElementById('panel').classList.remove('active'); }
-        document.getElementById('p-close').onclick = closePanel;
+        window.closePanel = closePanel;
+
+        function setupSlider() {
+            const track = document.getElementById('cf-track');
+            track.addEventListener('mousedown', e => {
+                const rect = track.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                cfRatio = Math.max(0, Math.min(1, x / rect.width));
+            });
+        }
+
+        function startApp() {
+            document.getElementById('loader').style.opacity = 0;
+            setTimeout(() => { document.getElementById('loader').style.display='none'; }, 500);
+        }
+        window.startApp = startApp;
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth/window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        window.onload = init;
 
     </script>
 </body>
