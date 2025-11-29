@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SONALIA: LOGICAL PIPELINE</title>
+    <title>SONALIA: 4D PIPELINE CORE</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
-        canvas { display: block; }
+        canvas { display: block; cursor: move; }
 
-        /* --- UI LAYER --- */
+        /* UI LAYER */
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
         #hud-title {
             position: absolute; top: 40px; left: 40px;
             border-left: 4px solid #00ffff; padding-left: 20px;
-            background: linear-gradient(90deg, rgba(0,20,30,0.9), transparent);
+            background: linear-gradient(90deg, rgba(0,20,30,0.8), transparent);
         }
         h1 { margin: 0; font-size: 32px; color: #fff; text-shadow: 0 0 20px #00ffff; letter-spacing: 4px; }
         p { margin: 5px 0 0; color: #00ffff; font-size: 14px; letter-spacing: 2px; }
@@ -22,31 +22,36 @@
         /* C:F METER */
         #cf-container {
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-            width: 500px; text-align: center; pointer-events: auto;
+            width: 400px; text-align: center; pointer-events: auto;
         }
         .cf-bar-bg {
-            width: 100%; height: 8px; background: #222; border: 1px solid #555; border-radius: 4px;
-            position: relative; margin-top: 10px; box-shadow: 0 0 15px rgba(0,255,255,0.1);
+            width: 100%; height: 6px; background: #222; border: 1px solid #555; border-radius: 3px;
+            position: relative; margin-top: 10px; box-shadow: 0 0 15px rgba(0,255,255,0.2);
             cursor: pointer;
         }
-        .cf-knob {
-            width: 16px; height: 24px; background: #fff; position: absolute; top: -8px; left: 50%;
-            transform: translateX(-50%); box-shadow: 0 0 10px #fff; transition: left 0.1s;
-            border-radius: 4px;
+        .cf-fill {
+            position: absolute; top: 0; left: 0; height: 100%; width: 50%;
+            background: linear-gradient(90deg, #00ffff, #ff0055);
+            transition: width 0.2s; opacity: 0.5;
         }
-        .cf-labels { display: flex; justify-content: space-between; font-size: 12px; color: #88aaff; font-weight: bold; }
+        .cf-knob {
+            width: 12px; height: 12px; background: #fff; position: absolute; top: -3px; left: 50%;
+            transform: translateX(-50%); box-shadow: 0 0 10px #fff; border-radius: 50%;
+            transition: left 0.2s;
+        }
+        .cf-labels { display: flex; justify-content: space-between; font-size: 12px; color: #88aaff; font-weight: bold; letter-spacing: 1px; }
 
         /* INFO PANEL */
         #panel {
             position: absolute; top: 0; right: 0; width: 380px; height: 100%;
-            background: rgba(8, 12, 16, 0.96); border-left: 1px solid #333;
+            background: rgba(8, 12, 16, 0.95); border-left: 1px solid #333;
             transform: translateX(100%); transition: 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
             color: #eee; display: flex; flex-direction: column; z-index: 20; pointer-events: auto;
             backdrop-filter: blur(10px);
         }
         #panel.active { transform: translateX(0); }
         .p-head { padding: 40px 30px; border-bottom: 1px solid #333; background: linear-gradient(180deg, rgba(0,255,255,0.1), transparent); }
-        .p-tag { font-size: 10px; padding: 4px 10px; border-radius: 2px; background: #00ffff; color: #000; font-weight: 800; }
+        .p-tag { font-size: 10px; padding: 4px 10px; border-radius: 2px; background: #00ffff; color: #000; font-weight: bold; }
         .p-title { font-size: 28px; margin: 15px 0 0; color: #fff; text-shadow: 0 0 15px currentColor; }
         .p-body { padding: 30px; overflow-y: auto; flex: 1; }
         .row { margin-bottom: 30px; }
@@ -66,18 +71,22 @@
         .load-sub { color: #00ffff; font-family: monospace; margin-top: 15px; animation: blink 1s infinite; }
         @keyframes blink { 50% { opacity: 0.5; } }
     </style>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r120/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.120.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
     <div id="loader" onclick="startApp()">
         <div class="load-text">SONALIA</div>
-        <div class="load-sub">LOADING PIPELINE...</div>
+        <div class="load-sub">LOADING 4D PIPELINE...</div>
     </div>
 
     <div id="ui-layer">
         <div id="hud-title">
             <h1>思考回路マップ</h1>
-            <p>LOGIC PIPELINE VISUALIZER</p>
+            <p>4D LOGICAL PIPELINE</p>
         </div>
 
         <div id="cf-container">
@@ -86,6 +95,7 @@
                 <span>FEELING (感情)</span>
             </div>
             <div class="cf-bar-bg" id="cf-track">
+                <div class="cf-fill" id="cf-fill"></div>
                 <div class="cf-knob" id="cf-knob"></div>
             </div>
         </div>
@@ -107,368 +117,281 @@
     <canvas id="canvas"></canvas>
 
     <script>
-        // --- DATA DEFINITION ---
+        // --- DATA (3D Coordinates for Horizontal 4D View) ---
+        // Z軸を主軸として配置 (-Z:Head -> +Z:Feet)
         const NODES = [
             // 1. INPUT (Head)
-            { id:"IN", type:"INPUT", name:"五感入力", color:"#FFFFFF", x:0, y:-180, z:0, size:8, desc:"外界情報の取得。", role:"Input", thought:"(Sensing)" },
+            { id:"IN", type:"INPUT", name:"五感入力", color:0xFFFFFF, x:0, y:0, z:-160, size:8, desc:"外界情報の取得。", role:"Input", thought:"(Sensing)" },
             
-            // 2. OS (Chest Rings)
-            { id:"OS4", type:"OS", name:"時間/協調", color:"#FFD700", x:0, y:-120, z:50, size:6, desc:"大局的判断。", role:"Meta View", thought:"「将来は？」" },
-            { id:"OS3", type:"OS", name:"報酬/意味", color:"#AA00FF", x:0, y:-100, z:50, size:6, desc:"価値判断。", role:"Value", thought:"「意味ある？」" },
-            { id:"OS2", type:"OS", name:"評価/所属", color:"#3388FF", x:0, y:-80, z:50, size:6, desc:"社会的判断。", role:"Social", thought:"「正しい？」" },
-            { id:"OS1", type:"OS", name:"生存/生活", color:"#00FFFF", x:0, y:-60, z:50, size:6, desc:"生存本能。", role:"Survival", thought:"「安全？」" },
+            // 2. OS (Chest Rings - Spread in Z)
+            { id:"OS4", type:"OS", name:"時間/協調", color:0xFFD700, x:0, y:0, z:-90, size:6, desc:"大局的判断。", role:"Meta View", thought:"「将来は？」" },
+            { id:"OS3", type:"OS", name:"報酬/意味", color:0xAA00FF, x:0, y:0, z:-70, size:6, desc:"価値判断。", role:"Value", thought:"「意味ある？」" },
+            { id:"OS2", type:"OS", name:"評価/所属", color:0x3388FF, x:0, y:0, z:-50, size:6, desc:"社会的判断。", role:"Social", thought:"「正しい？」" },
+            { id:"OS1", type:"OS", name:"生存/生活", color:0x00FFFF, x:0, y:0, z:-30, size:6, desc:"生存本能。", role:"Survival", thought:"「安全？」" },
 
-            // 3. DB (Stomach Core) - Offsets for visual clarity
-            { id:"DB1", type:"DB", name:"欲求DB", color:"#FF5500", x:-30, y:-10, z:30, size:10, desc:"根源的渇望。", role:"Motivation", thought:"(Desire)" },
-            { id:"DB2", type:"DB", name:"情動DB", color:"#0044FF", x:30, y:-10, z:30, size:10, desc:"感情記憶。", role:"Emotion", thought:"(Feeling)" },
-            { id:"DB3", type:"DB", name:"価値観DB", color:"#FFCC00", x:30, y:-10, z:-30, size:10, desc:"信念体系。", role:"Belief", thought:"(Rule)" },
-            { id:"DB4", type:"DB", name:"無意識DB", color:"#888888", x:-30, y:-10, z:-30, size:10, desc:"自動反応。", role:"Reflex", thought:"(Habit)" },
+            // 3. DB (Stomach Core - Inner Cluster)
+            { id:"DB1", type:"DB", name:"欲求DB", color:0xFF5500, x:-25, y:25, z:10, size:10, desc:"根源的渇望。", role:"Motivation", thought:"(Desire)" },
+            { id:"DB2", type:"DB", name:"情動DB", color:0x0044FF, x:25, y:25, z:10, size:10, desc:"感情記憶。", role:"Emotion", thought:"(Feeling)" },
+            { id:"DB3", type:"DB", name:"価値観DB", color:0xFFCC00, x:25, y:-25, z:10, size:10, desc:"信念体系。", role:"Belief", thought:"(Rule)" },
+            { id:"DB4", type:"DB", name:"無意識DB", color:0x888888, x:-25, y:-25, z:10, size:10, desc:"自動反応。", role:"Reflex", thought:"(Habit)" },
 
-            // 4. FACTOR (Waist Ring)
-            { id:"IQ", type:"係数", name:"IQ", color:"#00CCFF", y:60, angle:0, size:7, desc:"論理力。", role:"Logic", thought:"分析" },
-            { id:"EQ", type:"係数", name:"EQ", color:"#FF6666", y:60, angle:1, size:7, desc:"感情力。", role:"Empathy", thought:"共感" },
-            { id:"SQ", type:"係数", name:"SQ", color:"#FFCC00", y:60, angle:2, size:7, desc:"社会性。", role:"Social", thought:"適応" },
-            { id:"AQ", type:"係数", name:"AQ", color:"#888888", y:60, angle:3, size:7, desc:"逆境力。", role:"Resilience", thought:"忍耐" },
-            { id:"CQ", type:"係数", name:"CQ", color:"#AA00FF", y:60, angle:4, size:7, desc:"創造力。", role:"Idea", thought:"発想" },
-            { id:"HQ", type:"係数", name:"HQ", color:"#FFFFFF", y:60, angle:5, size:7, desc:"人間力。", role:"Ethics", thought:"誠実" },
-            { id:"MQ", type:"係数", name:"MQ", color:"#FF3300", y:60, angle:6, size:7, desc:"行動力。", role:"Action", thought:"実行" },
-            { id:"KQ", type:"係数", name:"KQ", color:"#00FF88", y:60, angle:7, size:7, desc:"知識力。", role:"Knowledge", thought:"応用" },
+            // 4. FACTOR (Waist Ring - Orbiting)
+            { id:"IQ", type:"係数", name:"IQ", color:0x00CCFF, z:60, angle:0, size:7, desc:"論理力。", role:"Logic", thought:"分析" },
+            { id:"EQ", type:"係数", name:"EQ", color:0xFF6666, z:60, angle:1, size:7, desc:"感情力。", role:"Empathy", thought:"共感" },
+            { id:"SQ", type:"係数", name:"SQ", color:0xFFCC00, z:60, angle:2, size:7, desc:"社会性。", role:"Social", thought:"適応" },
+            { id:"AQ", type:"係数", name:"AQ", color:0x888888, z:60, angle:3, size:7, desc:"逆境力。", role:"Resilience", thought:"忍耐" },
+            { id:"CQ", type:"係数", name:"CQ", color:0xAA00FF, z:60, angle:4, size:7, desc:"創造力。", role:"Idea", thought:"発想" },
+            { id:"HQ", type:"係数", name:"HQ", color:0xFFFFFF, z:60, angle:5, size:7, desc:"人間力。", role:"Ethics", thought:"誠実" },
+            { id:"MQ", type:"係数", name:"MQ", color:0xFF3300, z:60, angle:6, size:7, desc:"行動力。", role:"Action", thought:"実行" },
+            { id:"KQ", type:"係数", name:"KQ", color:0x00FF88, z:60, angle:7, size:7, desc:"知識力。", role:"Knowledge", thought:"応用" },
 
             // 5. OUTPUT (Feet)
-            { id:"OUT", type:"OUTPUT", name:"行動", color:"#FFFFFF", x:0, y:150, z:0, size:10, desc:"最終出力。", role:"Output", thought:"(Act)" }
+            { id:"OUT", type:"OUTPUT", name:"行動", color:0xFFFFFF, x:0, y:0, z:150, size:10, desc:"最終出力。", role:"Output", thought:"(Act)" }
         ];
 
-        // Labels for diagram
         const LABELS = [
-            { text: "◀ 入力 (五感)", y: -180 },
-            { text: "◀ 4層OS (意味付)", y: -90 },
-            { text: "◀ 内面DB (ルーツ)", y: -10 },
-            { text: "◀ 8係数 (処理)", y: 60 },
-            { text: "◀ 出力 (行動)", y: 150 }
+            { text: "◀ INPUT", z: -160 },
+            { text: "◀ OS", z: -60 },
+            { text: "◀ DB", z: 10 },
+            { text: "◀ FACTOR", z: 60 },
+            { text: "◀ OUTPUT", z: 150 }
         ];
 
-        // --- 1. ENGINE ---
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        let width, height;
-        let points = [];
-        let flowParticles = [];
+        let scene, camera, renderer, controls;
+        let mainGroup, glowTex;
+        const interactables = [];
+        const clock = new THREE.Clock();
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
         
-        // Camera
-        let angleY = 0; 
-        let cfRatio = 0.5; // 0 to 1
-        let isDragging = false;
-        let lastMouseX = 0;
-
-        // Class Point
-        class Point {
-            constructor(d) {
-                this.x = d.x || 0; this.y = d.y || 0; this.z = d.z || 0;
-                // Factor arrange
-                if(d.angle !== undefined) {
-                    const r = 60;
-                    const ang = (d.angle / 8) * Math.PI * 2;
-                    this.x = Math.cos(ang) * r;
-                    this.z = Math.sin(ang) * r;
-                }
-                this.color = d.color;
-                this.size = d.size;
-                this.data = d;
-                this.sx=0; this.sy=0; this.scale=0;
-            }
-            project(cx, cy) {
-                // Rotate Y
-                let x = this.x * Math.cos(angleY) - this.z * Math.sin(angleY);
-                let z = this.z * Math.cos(angleY) + this.x * Math.sin(angleY);
-                let y = this.y;
-
-                // Map Y to Screen X (Horizontal Layout)
-                // Head(-180) -> Left, Feet(+150) -> Right
-                let px = y; 
-                let py = x; 
-                let pz = z;
-
-                const fov = 600;
-                const scale = fov / (fov + pz + 400);
-                this.sx = px * scale + cx;
-                this.sy = py * scale + cy;
-                this.scale = scale;
-                this.zIndex = pz;
-            }
-            draw(ctx) {
-                // Draw Connection Line (Spine/Nerve)
-                // Connect to spine center (y axis)
-                // Simplified visualization: Draw line to "Spine"
-                // Not drawing here, drawn in batch
-                
-                // Draw Node
-                ctx.globalAlpha = 1.0;
-                const r = this.size * this.scale;
-                
-                // Glow
-                const grad = ctx.createRadialGradient(this.sx, this.sy, 0, this.sx, this.sy, r*4);
-                grad.addColorStop(0, this.color);
-                grad.addColorStop(1, "rgba(0,0,0,0)");
-                ctx.fillStyle = grad;
-                ctx.beginPath(); ctx.arc(this.sx, this.sy, r*4, 0, Math.PI*2); ctx.fill();
-
-                // Core
-                ctx.fillStyle = "#fff";
-                ctx.beginPath(); ctx.arc(this.sx, this.sy, r, 0, Math.PI*2); ctx.fill();
-
-                // Text
-                if(this.scale > 0.6) {
-                    ctx.fillStyle = "#fff";
-                    ctx.font = (10 * this.scale) + "px Arial";
-                    ctx.textAlign = "center";
-                    ctx.fillText(this.data.name, this.sx, this.sy + r + 15);
-                }
-            }
-        }
+        let cfRatio = 0.5;
 
         function init() {
-            resize();
-            points = NODES.map(d => new Point(d));
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.001);
+
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 1, 3000);
+            camera.position.set(300, 100, 0); // 3D Side View
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, canvas: document.getElementById('canvas') });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.autoRotate = true; // Auto Rotate ON for 4D effect
+            controls.autoRotateSpeed = 0.5;
+
+            mainGroup = new THREE.Group();
+            // Rotate to horizontal sleeper position
+            mainGroup.rotation.z = -Math.PI / 2; 
+            scene.add(mainGroup);
+
+            glowTex = createGlowTex();
+
+            // Build
+            buildHumanWireframe();
+            buildNodes();
+            buildPipeline(); // The connecting lines
+            buildParticles(); // The flow
+
+            // C:F Slider Logic
+            setupSlider();
+
+            animate();
+            setTimeout(startApp, 1500);
+        }
+
+        function createGlowTex() {
+            const c = document.createElement('canvas'); c.width=64; c.height=64;
+            const ctx = c.getContext('2d');
+            const g = ctx.createRadialGradient(32,32,0, 32,32,32);
+            g.addColorStop(0, 'rgba(255,255,255,1)');
+            g.addColorStop(0.2, 'rgba(255,255,255,0.2)');
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle=g; ctx.fillRect(0,0,64,64);
+            return new THREE.CanvasTexture(c);
+        }
+
+        // 1. Human Silhouette (3D Wireframe)
+        function buildHumanWireframe() {
+            const mat = new THREE.PointsMaterial({ color: 0x004466, size: 2, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending });
+            const geo = new THREE.Geometry();
             
-            // Create Flow Particles
-            for(let i=0; i<60; i++) {
-                flowParticles.push({
-                    y: -200, // Start at Head
-                    speed: 2 + Math.random()*3,
-                    offset: Math.random() * Math.PI * 2,
-                    phase: 0 // 0:Input, 1:OS, 2:DB, 3:Factor, 4:Out
+            for(let i=0; i<1500; i++) {
+                const z = (Math.random() * 320) - 160; // Length
+                let rMax = 0;
+                if (z < -130) rMax = 25; // Head
+                else if (z < -110) rMax = 15; // Neck
+                else if (z < -30) rMax = 55; // Chest
+                else if (z < 40) rMax = 45; // Waist
+                else rMax = 50; // Legs
+
+                const ang = Math.random() * Math.PI * 2;
+                const r = Math.random() * rMax;
+                geo.vertices.push(new THREE.Vector3(Math.cos(ang)*r, Math.sin(ang)*r, z));
+            }
+            mainGroup.add(new THREE.Points(geo, mat));
+        }
+
+        // 2. Nodes & Rings
+        function buildNodes() {
+            NODES.forEach(d => {
+                let mesh;
+                if(d.type === 'OS') {
+                    // OS Rings
+                    const geo = new THREE.TorusGeometry(40, 0.5, 16, 64);
+                    mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: d.color, transparent: true, opacity: 0.6 }));
+                    mesh.position.z = d.z;
+                    // Hitbox
+                    const hit = new THREE.Mesh(new THREE.CylinderGeometry(40,40,5,16), new THREE.MeshBasicMaterial({visible:false}));
+                    hit.rotation.x = Math.PI/2; 
+                    hit.position.z = d.z;
+                    hit.userData = { data: d };
+                    interactables.push(hit);
+                    mainGroup.add(hit);
+
+                } else if(d.type === '係数') {
+                    // Factors Ring
+                    const r = 60;
+                    const ang = (d.angle/8) * Math.PI * 2;
+                    mesh = new THREE.Mesh(new THREE.BoxGeometry(8,8,8), new THREE.MeshBasicMaterial({ color: d.color, wireframe: true }));
+                    mesh.position.set(Math.cos(ang)*r, Math.sin(ang)*r, d.z);
+                    mesh.userData = { data: d };
+                    interactables.push(mesh);
+
+                } else {
+                    // DB, Input, Output
+                    mesh = new THREE.Mesh(new THREE.SphereGeometry(d.size, 16, 16), new THREE.MeshBasicMaterial({ color: d.color, wireframe: d.type==='DB' }));
+                    mesh.position.set(d.x||0, d.y||0, d.z);
+                    mesh.userData = { data: d };
+                    interactables.push(mesh);
+                }
+
+                if(mesh) {
+                    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: d.color, blending: THREE.AdditiveBlending }));
+                    spr.scale.set(d.size*4 || 30, d.size*4 || 30, 1);
+                    mesh.add(spr);
+                    mainGroup.add(mesh);
+                }
+            });
+        }
+
+        // 3. Pipeline (Connections)
+        function buildPipeline() {
+            // Main Spine
+            const spineGeo = new THREE.Geometry();
+            spineGeo.vertices.push(new THREE.Vector3(0,0,-160), new THREE.Vector3(0,0,150));
+            mainGroup.add(new THREE.Line(spineGeo, new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3 })));
+
+            // Connections from Spine to Nodes
+            NODES.forEach(d => {
+                if(d.x !== undefined && (d.x !== 0 || d.y !== 0)) {
+                    const geo = new THREE.Geometry();
+                    geo.vertices.push(new THREE.Vector3(0,0,d.z), new THREE.Vector3(d.x, d.y, d.z));
+                    mainGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: d.color, transparent: true, opacity: 0.2 })));
+                }
+            });
+        }
+
+        // 4. Flow Particles (The Loop)
+        const particles = [];
+        function buildParticles() {
+            const pGeo = new THREE.Geometry();
+            for(let i=0; i<100; i++) {
+                pGeo.vertices.push(new THREE.Vector3(0,0,0));
+                particles.push({
+                    z: -180 + Math.random()*50,
+                    speed: 1 + Math.random()*2,
+                    offset: Math.random() * Math.PI * 2
                 });
             }
-            
-            animate();
-            setTimeout(startApp, 500);
+            const pMat = new THREE.PointsMaterial({ color: 0xffffff, size: 2, map: glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+            const sys = new THREE.Points(pGeo, pMat);
+            mainGroup.add(sys);
         }
 
-        function resize() {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
-        }
-
-        function hexToRgb(hex, alpha) {
-            const r = parseInt(hex.slice(1, 3), 16);
-            const g = parseInt(hex.slice(3, 5), 16);
-            const b = parseInt(hex.slice(5, 7), 16);
-            return `rgba(${r},${g},${b},${alpha})`;
-        }
-
+        // --- ANIMATION ---
         function animate() {
-            // Clear
-            ctx.fillStyle = "#000510";
-            ctx.fillRect(0, 0, width, height);
-
-            const cx = width / 2;
-            const cy = height / 2;
-            
-            if(!isDragging) angleY += 0.003;
-
-            // Project Points
-            points.forEach(p => p.project(cx, cy));
-            points.sort((a, b) => b.zIndex - a.zIndex);
-
-            // 1. Draw Central Spine (Pipeline)
-            const spineStart = { x: 0, y: -200, z: 0 };
-            const spineEnd = { x: 0, y: 180, z: 0 };
-            // Project Spine Start
-            let ssx = spineStart.x * Math.cos(angleY) - spineStart.z * Math.sin(angleY); // 0
-            let ssz = spineStart.z * Math.cos(angleY) + spineStart.x * Math.sin(angleY); // 0
-            let ssy = spineStart.y; // -200
-            let scaleS = 600 / (600 + ssz + 400);
-            let screenSX = ssy * scaleS + cx;
-            let screenSY = ssx * scaleS + cy;
-            
-            // Project Spine End
-            let esx = spineEnd.x * Math.cos(angleY) - spineEnd.z * Math.sin(angleY);
-            let esz = spineEnd.z * Math.cos(angleY) + spineEnd.x * Math.sin(angleY);
-            let esy = spineEnd.y;
-            let scaleE = 600 / (600 + esz + 400);
-            let screenEX = esy * scaleE + cx;
-            let screenEY = esx * scaleE + cy;
-
-            ctx.strokeStyle = "rgba(0, 255, 255, 0.3)";
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(screenSX, screenSY);
-            ctx.lineTo(screenEX, screenEY);
-            ctx.stroke();
-
-            // 2. Draw Connections (Node to Spine)
-            ctx.lineWidth = 1;
-            points.forEach(p => {
-                // Calculate spine point at this node's Y
-                let spy = p.data.y;
-                let spx = 0; 
-                let spz = 0;
-                // Project Spine point
-                let rx = spx * Math.cos(angleY) - spz * Math.sin(angleY);
-                let rz = spz * Math.cos(angleY) + spx * Math.sin(angleY);
-                let s = 600 / (600 + rz + 400);
-                let sx = spy * s + cx;
-                let sy = rx * s + cy;
-
-                ctx.strokeStyle = `rgba(255, 255, 255, 0.2)`;
-                ctx.beginPath();
-                ctx.moveTo(sx, sy);
-                ctx.lineTo(p.sx, p.sy);
-                ctx.stroke();
-            });
-
-            // 3. Draw Nodes
-            points.forEach(p => p.draw(ctx));
-
-            // 4. Draw Flow Particles
-            const time = Date.now() * 0.001;
-            ctx.globalCompositeOperation = 'lighter';
-            flowParticles.forEach(p => {
-                // Update Pos
-                let speed = p.speed * (1 + (cfRatio - 0.5)); // C:F influence
-                p.y += speed;
-                
-                // Logic: Pause at DB (Stomach)
-                if(p.y > -20 && p.y < 20) {
-                    p.y += speed * 0.5; // Slow down at DB
-                    // Expand radius
-                    var r = 20;
-                } else {
-                    var r = 5;
-                }
-                
-                let x = Math.cos(time*5 + p.offset) * r;
-                let z = Math.sin(time*5 + p.offset) * r;
-
-                if (p.y > 180) p.y = -200; // Reset
-
-                // Project
-                let rx = x * Math.cos(angleY) - z * Math.sin(angleY);
-                let rz = z * Math.cos(angleY) + x * Math.sin(angleY);
-                let scale = 600 / (600 + rz + 400);
-                let sx = p.y * scale + cx;
-                let sy = rx * scale + cy;
-
-                // Color based on position (Cyan -> Purple -> White)
-                let col = "255, 255, 255";
-                if(p.y < -50) col = "0, 255, 255"; // Input/OS
-                else if(p.y < 30) col = "255, 100, 0"; // DB
-                else col = "200, 0, 255"; // Factor
-
-                ctx.fillStyle = `rgba(${col}, 0.8)`;
-                ctx.beginPath();
-                ctx.arc(sx, sy, 3 * scale, 0, Math.PI*2);
-                ctx.fill();
-            });
-            ctx.globalCompositeOperation = 'source-over';
-
-            // 5. Draw Diagram Labels
-            ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-            ctx.font = "12px Consolas";
-            ctx.textAlign = "left";
-            
-            LABELS.forEach(l => {
-                // Project label pos (Fixed X offset from spine)
-                let spy = l.y;
-                let spx = 0; let spz = 0;
-                let rz = spz * Math.cos(angleY) + spx * Math.sin(angleY);
-                let s = 600 / (600 + rz + 400);
-                let sx = spy * s + cx;
-                let sy = 0 * s + cy; // Center line
-                
-                // Draw Label Text
-                ctx.fillText(l.text, sx + 120 * s, sy - 50 * s);
-                // Line
-                ctx.strokeStyle = "rgba(0,255,255,0.3)";
-                ctx.beginPath();
-                ctx.moveTo(sx, sy);
-                ctx.lineTo(sx + 110*s, sy - 50*s);
-                ctx.stroke();
-            });
-
             requestAnimationFrame(animate);
+            TWEEN.update();
+            controls.update();
+            
+            const time = clock.getElapsedTime();
+            
+            // Pulse
+            const s = 1 + Math.sin(time)*0.01;
+            mainGroup.scale.set(s, s, 1);
+
+            // Flow
+            const pGeo = mainGroup.children[mainGroup.children.length-1].geometry;
+            particles.forEach((p, i) => {
+                p.z += p.speed;
+                const r = 15 * (1 - (Math.abs(p.z)/200)); // Narrow at ends
+                pGeo.vertices[i].set(
+                    Math.cos(time*3 + p.offset)*r,
+                    Math.sin(time*3 + p.offset)*r,
+                    p.z
+                );
+                if(p.z > 150) p.z = -180;
+            });
+            pGeo.verticesNeedUpdate = true;
+
+            // C:F Meter Anim
+            const fill = document.getElementById('cf-fill');
+            const knob = document.getElementById('cf-knob');
+            const val = 50 + Math.sin(time*0.5)*30;
+            if(fill) fill.style.width = val + '%';
+            if(knob) knob.style.left = val + '%';
+
+            renderer.render(scene, camera);
         }
 
-        // --- EVENTS ---
-        window.addEventListener('resize', () => {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
-        });
-
+        // --- INTERACTION ---
         window.addEventListener('mousedown', e => {
             if(e.target.closest('#panel') || e.target.closest('#cf-container')) return;
             
-            // Hit Test
-            let hit = false;
-            // Sort by depth for click
-            const sorted = [...points].sort((a,b) => a.zIndex - b.zIndex); 
+            // Temporarily stop rotation on interaction
+            controls.autoRotate = false;
+            setTimeout(() => controls.autoRotate = true, 3000);
+
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(interactables);
             
-            for(let p of sorted) {
-                const dx = e.clientX - p.sx;
-                const dy = e.clientY - p.sy;
-                if(Math.sqrt(dx*dx + dy*dy) < 20 * p.scale) {
-                    showPanel(p.data);
-                    hit = true;
-                    isDragging = false;
-                    break;
-                }
-            }
-            if(!hit) {
-                isDragging = true;
-                lastMouseX = e.clientX;
+            if(hits.length > 0) {
+                const t = hits[0].object;
+                showPanel(t.userData.data);
+            } else {
                 closePanel();
             }
         });
 
-        window.addEventListener('mousemove', e => {
-            if(isDragging) {
-                const delta = e.clientX - lastMouseX;
-                angleY += delta * 0.01;
-                lastMouseX = e.clientX;
-            }
-            // Cursor
-            let hit = false;
-            for(let p of points) {
-                const dx = e.clientX - p.sx;
-                const dy = e.clientY - p.sy;
-                if(Math.sqrt(dx*dx + dy*dy) < 20 * p.scale) hit = true;
-            }
-            document.body.style.cursor = hit ? 'pointer' : 'default';
-        });
-
-        window.addEventListener('mouseup', () => isDragging = false);
-
-        // C:F Slider Logic
-        const track = document.getElementById('cf-track');
-        const knob = document.getElementById('cf-knob');
-        let isSliding = false;
-
-        track.addEventListener('mousedown', e => { isSliding = true; updateSlider(e); });
-        window.addEventListener('mousemove', e => { if(isSliding) updateSlider(e); });
-        window.addEventListener('mouseup', () => isSliding = false);
-
-        function updateSlider(e) {
-            const rect = track.getBoundingClientRect();
-            let x = e.clientX - rect.left;
-            x = Math.max(0, Math.min(x, rect.width));
-            cfRatio = x / rect.width;
-            knob.style.left = (cfRatio * 100) + '%';
-        }
-
         function showPanel(d) {
             document.getElementById('p-tag').innerText = d.type;
-            document.getElementById('p-tag').style.background = d.color;
+            document.getElementById('p-tag').style.background = '#'+new THREE.Color(d.color).getHexString();
             document.getElementById('p-title').innerText = d.name;
-            document.getElementById('p-title').style.color = d.color;
+            document.getElementById('p-title').style.color = '#'+new THREE.Color(d.color).getHexString();
             document.getElementById('p-desc').innerText = d.desc;
             document.getElementById('p-role').innerText = d.role;
             document.getElementById('p-thought').innerText = d.thought;
             document.getElementById('panel').classList.add('active');
         }
-        function closePanel() {
-            document.getElementById('panel').classList.remove('active');
-        }
+        function closePanel() { document.getElementById('panel').classList.remove('active'); }
         window.closePanel = closePanel;
+
+        // Slider Logic
+        function setupSlider() {
+            const track = document.getElementById('cf-track');
+            track.addEventListener('mousedown', e => {
+                const rect = track.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const pct = Math.max(0, Math.min(1, x / rect.width));
+                cfRatio = pct;
+                // Visual update handled in animate loop for demo
+            });
+        }
 
         function startApp() {
             document.getElementById('loader').style.opacity = 0;
@@ -476,8 +399,13 @@
         }
         window.startApp = startApp;
 
-        // Init
-        init();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = init;
 
     </script>
 </body>
