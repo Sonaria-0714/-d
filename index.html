@@ -19,22 +19,45 @@
         h1 { margin: 0; font-size: 32px; color: #fff; text-shadow: 0 0 20px #00ffff; letter-spacing: 4px; }
         p { margin: 5px 0 0; color: #00ffff; font-size: 14px; letter-spacing: 2px; }
 
+        /* PHASE INDICATOR (Resurrected) */
+        #phase-indicator {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            width: 80%; max-width: 800px; text-align: center;
+        }
+        .phase-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(0, 15, 30, 0.85); padding: 15px 30px; border-radius: 50px;
+            border: 1px solid rgba(0, 255, 255, 0.3); box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+        .phase-item {
+            color: #444; font-size: 12px; font-weight: bold; letter-spacing: 2px; transition: 0.3s;
+            position: relative; padding: 5px 10px;
+        }
+        .phase-item.active { color: #fff; text-shadow: 0 0 10px #00ffff; transform: scale(1.1); }
+        .phase-item.active::after {
+            content: ''; position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%);
+            width: 100%; height: 2px; background: #00ffff; box-shadow: 0 0 10px #00ffff;
+        }
+        .phase-arrow { color: #333; font-size: 10px; }
+        .phase-arrow.active { color: #00ffff; animation: flow 1s infinite; }
+        @keyframes flow { 0%{opacity:0; transform:translateX(-3px);} 100%{opacity:1; transform:translateX(3px);} }
+
         /* C:F METER */
         #cf-container {
-            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-            width: 500px; text-align: center; pointer-events: auto;
+            position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%);
+            width: 400px; text-align: center; pointer-events: auto;
         }
         .cf-bar-bg {
-            width: 100%; height: 8px; background: #222; border: 1px solid #555; border-radius: 4px;
-            position: relative; margin-top: 10px; box-shadow: 0 0 15px rgba(0,255,255,0.1);
+            width: 100%; height: 6px; background: #222; border: 1px solid #555; border-radius: 4px;
+            position: relative; margin-top: 8px; box-shadow: 0 0 15px rgba(0,255,255,0.1);
             cursor: pointer;
         }
         .cf-knob {
-            width: 16px; height: 24px; background: #fff; position: absolute; top: -8px; left: 50%;
+            width: 16px; height: 16px; background: #fff; border-radius: 50%; 
+            position: absolute; top: -5px; left: 50%;
             transform: translateX(-50%); box-shadow: 0 0 10px #fff; transition: left 0.1s;
-            border-radius: 4px;
         }
-        .cf-labels { display: flex; justify-content: space-between; font-size: 12px; color: #88aaff; font-weight: bold; }
+        .cf-labels { display: flex; justify-content: space-between; font-size: 11px; color: #88aaff; font-weight: bold; }
 
         /* INFO PANEL */
         #panel {
@@ -65,13 +88,7 @@
         .load-text { font-size: 40px; color: #fff; font-weight: bold; letter-spacing: 6px; text-shadow: 0 0 30px #00ffff; }
         .load-sub { color: #00ffff; font-family: monospace; margin-top: 15px; animation: blink 1s infinite; }
         @keyframes blink { 50% { opacity: 0.5; } }
-        
-        /* ERROR BOX (Hidden by default) */
-        #error-box {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(50,0,0,0.9); border: 1px solid red; padding: 20px;
-            color: #fff; display: none; z-index: 10000; font-family: monospace;
-        }
+        #error-box { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(50,0,0,0.9); border: 1px solid red; padding: 20px; color: #fff; display: none; z-index: 10000; font-family: monospace; }
     </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r120/three.min.js"></script>
@@ -84,7 +101,7 @@
 
     <div id="loader" onclick="startApp()">
         <div class="load-text">SONALIA</div>
-        <div class="load-sub">LOADING PIPELINE...</div>
+        <div class="load-sub">LOADING LOGIC PIPELINE...</div>
     </div>
 
     <div id="ui-layer">
@@ -100,6 +117,20 @@
             </div>
             <div class="cf-bar-bg" id="cf-track">
                 <div class="cf-knob" id="cf-knob"></div>
+            </div>
+        </div>
+
+        <div id="phase-indicator">
+            <div class="phase-bar">
+                <div class="phase-item" id="ph-in">入力</div>
+                <div class="phase-arrow" id="ar-1">▶▶</div>
+                <div class="phase-item" id="ph-os">OS</div>
+                <div class="phase-arrow" id="ar-2">▶▶</div>
+                <div class="phase-item" id="ph-db">DB</div>
+                <div class="phase-arrow" id="ar-3">▶▶</div>
+                <div class="phase-item" id="ph-fc">係数</div>
+                <div class="phase-arrow" id="ar-4">▶▶</div>
+                <div class="phase-item" id="ph-out">出力</div>
             </div>
         </div>
     </div>
@@ -120,7 +151,6 @@
     <canvas id="canvas"></canvas>
 
     <script>
-        // --- Error Handling ---
         window.onerror = function(msg, url, line) {
             const el = document.getElementById('error-box');
             el.style.display = 'block';
@@ -130,19 +160,15 @@
 
         // --- DATA ---
         const NODES = [
-            // 1. INPUT (Head)
             { id:"IN", type:"INPUT", name:"五感入力", color:0xFFFFFF, x:0, y:0, z:-180, size:8, desc:"外界情報の取得。", role:"Input", thought:"(Sensing)" },
-            // 2. OS (Chest)
             { id:"OS4", type:"OS", name:"時間/協調", color:0xFFD700, x:0, y:0, z:-110, size:6, desc:"大局的判断。", role:"Meta View", thought:"「将来は？」" },
             { id:"OS3", type:"OS", name:"報酬/意味", color:0xAA00FF, x:0, y:0, z:-90, size:6, desc:"価値判断。", role:"Value", thought:"「意味ある？」" },
             { id:"OS2", type:"OS", name:"評価/所属", color:0x3388FF, x:0, y:0, z:-70, size:6, desc:"社会的判断。", role:"Social", thought:"「正しい？」" },
             { id:"OS1", type:"OS", name:"生存/生活", color:0x00FFFF, x:0, y:0, z:-50, size:6, desc:"生存本能。", role:"Survival", thought:"「安全？」" },
-            // 3. DB (Stomach)
             { id:"DB1", type:"DB", name:"欲求DB", color:0xFF5500, x:-30, y:-10, z:10, size:10, desc:"根源的渇望。", role:"Motivation", thought:"(Desire)" },
             { id:"DB2", type:"DB", name:"情動DB", color:0x0044FF, x:30, y:-10, z:10, size:10, desc:"感情記憶。", role:"Emotion", thought:"(Feeling)" },
             { id:"DB3", type:"DB", name:"価値観DB", color:0xFFCC00, x:30, y:-10, z:-30, size:10, desc:"信念体系。", role:"Belief", thought:"(Rule)" },
             { id:"DB4", type:"DB", name:"無意識DB", color:0x888888, x:-30, y:-10, z:-30, size:10, desc:"自動反応。", role:"Reflex", thought:"(Habit)" },
-            // 4. FACTOR (Waist)
             { id:"IQ", type:"係数", name:"IQ", color:0x00CCFF, z:70, angle:0, size:7, desc:"論理力。", role:"Logic", thought:"分析" },
             { id:"EQ", type:"係数", name:"EQ", color:0xFF6666, z:70, angle:1, size:7, desc:"感情力。", role:"Empathy", thought:"共感" },
             { id:"SQ", type:"係数", name:"SQ", color:0xFFCC00, z:70, angle:2, size:7, desc:"社会性。", role:"Social", thought:"適応" },
@@ -151,11 +177,9 @@
             { id:"HQ", type:"係数", name:"HQ", color:0xFFFFFF, z:70, angle:5, size:7, desc:"人間力。", role:"Ethics", thought:"誠実" },
             { id:"MQ", type:"係数", name:"MQ", color:0xFF3300, z:70, angle:6, size:7, desc:"行動力。", role:"Action", thought:"実行" },
             { id:"KQ", type:"係数", name:"KQ", color:0x00FF88, z:70, angle:7, size:7, desc:"知識力。", role:"Knowledge", thought:"応用" },
-            // 5. OUTPUT (Feet)
             { id:"OUT", type:"OUTPUT", name:"行動", color:0xFFFFFF, x:0, y:0, z:160, size:10, desc:"最終出力。", role:"Output", thought:"(Act)" }
         ];
 
-        // --- ENGINE ---
         let scene, camera, renderer, controls;
         let mainGroup, glowTex;
         let cfRatio = 0.5;
@@ -170,7 +194,7 @@
         let memoryGeo, memoryMat;
         const cfFilterMesh = [];
 
-        // Node Cache for Pathfinding
+        // Node Cache
         const nodeCache = {
             INPUT: [], OS: [], DB: [], FACTOR: [], OUTPUT: []
         };
@@ -218,7 +242,6 @@
         }
 
         function buildPipelineStructure() {
-            // Spine
             const points = [new THREE.Vector3(0,0,-200), new THREE.Vector3(0,0,200)];
             const spineGeo = new THREE.BufferGeometry().setFromPoints(points);
             const spineLine = new THREE.Line(spineGeo, new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3 }));
@@ -332,6 +355,11 @@
             TWEEN.update();
             controls.update();
             
+            const time = clock.getElapsedTime();
+            const cycle = 8.0;
+            const t = time % cycle;
+            updatePhase(t);
+
             if(Math.random() > 0.95) spawnMeteor();
 
             // Meteors
@@ -340,7 +368,7 @@
                 m.z += m.speed;
                 m.mesh.position.z = m.z;
 
-                // 【修正点】色補間処理を互換性のある書き方に変更
+                // Color Interpolation Fix
                 if(m.state === 3 && m.z > 130) { // Filter Gate
                     m.state = 4;
                     const c1 = new THREE.Color(0x00ffff);
@@ -370,7 +398,7 @@
                 }
             }
 
-            // Memories Update
+            // Memories
             const positions = memoryGeo.attributes.position.array;
             const colors = memoryGeo.attributes.color.array;
             for(let i=0; i<200; i++) { positions[i*3] = 0; positions[i*3+1] = 0; positions[i*3+2] = 0; }
@@ -390,15 +418,27 @@
             memoryGeo.attributes.position.needsUpdate = true;
             memoryGeo.attributes.color.needsUpdate = true;
 
-            // Filter Gate Color Update (Compatible Way)
-            const fc1 = new THREE.Color(0x00ffff);
-            const fc2 = new THREE.Color(0xff0055);
+            // Filter Color
+            const fCol1 = new THREE.Color(0x00ffff);
+            const fCol2 = new THREE.Color(0xff0055);
             if(cfFilterMesh[0]) {
-                cfFilterMesh[0].material.color.copy(fc1).lerp(fc2, cfRatio);
+                cfFilterMesh[0].material.color.copy(fCol1).lerp(fCol2, cfRatio);
             }
             document.getElementById('cf-knob').style.left = (cfRatio*100) + '%';
 
             renderer.render(scene, camera);
+        }
+
+        function updatePhase(t) {
+            // Reset
+            document.querySelectorAll('.phase-item').forEach(e=>e.classList.remove('active'));
+            document.querySelectorAll('.phase-arrow').forEach(e=>e.classList.remove('active'));
+
+            if(t < 1.5) { document.getElementById('ph-in').classList.add('active'); document.getElementById('ar-1').classList.add('active'); }
+            else if(t < 3.0) { document.getElementById('ph-os').classList.add('active'); document.getElementById('ar-2').classList.add('active'); }
+            else if(t < 4.5) { document.getElementById('ph-db').classList.add('active'); document.getElementById('ar-3').classList.add('active'); }
+            else if(t < 6.0) { document.getElementById('ph-fc').classList.add('active'); document.getElementById('ar-4').classList.add('active'); }
+            else { document.getElementById('ph-out').classList.add('active'); }
         }
 
         // Interaction
@@ -420,22 +460,6 @@
             }
         });
 
-        function showPanel(d) {
-            // 修正: カラーコードの扱いを安全に
-            const hex = new THREE.Color(d.color).getHexString();
-            
-            document.getElementById('p-tag').innerText = d.type;
-            document.getElementById('p-tag').style.background = '#' + hex;
-            document.getElementById('p-title').innerText = d.name;
-            document.getElementById('p-title').style.color = '#' + hex;
-            document.getElementById('p-desc').innerText = d.desc;
-            document.getElementById('p-role').innerText = d.role;
-            document.getElementById('p-thought').innerText = d.thought;
-            document.getElementById('panel').classList.add('active');
-        }
-        function closePanel() { document.getElementById('panel').classList.remove('active'); }
-        window.closePanel = closePanel;
-
         function setupSlider() {
             const track = document.getElementById('cf-track');
             track.addEventListener('mousedown', e => {
@@ -444,6 +468,19 @@
                 cfRatio = Math.max(0, Math.min(1, x / rect.width));
             });
         }
+
+        function showPanel(d) {
+            document.getElementById('p-tag').innerText = d.type;
+            document.getElementById('p-tag').style.background = '#'+new THREE.Color(d.color).getHexString();
+            document.getElementById('p-title').innerText = d.name;
+            document.getElementById('p-title').style.color = '#'+new THREE.Color(d.color).getHexString();
+            document.getElementById('p-desc').innerText = d.desc;
+            document.getElementById('p-role').innerText = d.role;
+            document.getElementById('p-thought').innerText = d.thought;
+            document.getElementById('panel').classList.add('active');
+        }
+        function closePanel() { document.getElementById('panel').classList.remove('active'); }
+        window.closePanel = closePanel;
 
         function startApp() {
             document.getElementById('loader').style.opacity = 0;
